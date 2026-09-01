@@ -259,96 +259,63 @@ class ParticleSystem:
                 alive.append(p)
         self.particles = alive
 
-class RadialHUD:
+class HorizontalHUD:
     def __init__(self):
-        self.options = [
-            ("MODE", "MODE"),
-            ("FILTER", "FILTER"),
-            ("WARNA", "WARNA"),
-            ("STEMPEL", "STEMPEL"),
-            ("HAPUS", "HAPUS"),
-            ("FOTO", "FOTO")
+        self.buttons = [
+            ("MODE", "MODE", (95, 20, 215, 62)),
+            ("FILTER", "FILTER", (225, 20, 345, 62)),
+            ("WARNA", "WARNA", (355, 20, 475, 62)),
+            ("STEMPEL", "STEMPEL", (485, 20, 605, 62)),
+            ("HAPUS", "HAPUS", (615, 20, 735, 62)),
+            ("FOTO", "FOTO", (745, 20, 865, 62)),
         ]
-        self.hover_idx = -1
+        self.hover_target = None
         self.hover_start = None
-        self.dwell_time = 0.45
-        self.radius_inner = 45
-        self.radius_outer = 130
+        self.dwell_time = 0.40
 
-    def draw_and_update(self, img, center, pointer, is_menu_gesture, now):
-        triggered = None
-        if not is_menu_gesture or center is None:
-            self.hover_idx = -1
-            self.hover_start = None
-            return None
+    def draw_and_update(self, img, pointer_pt, now):
+        triggered_action = None
+        for b_id, label, (x1, y1, x2, y2) in self.buttons:
+            is_hover = False
+            if pointer_pt is not None:
+                cx, cy = pointer_pt
+                if x1 <= cx <= x2 and y1 <= cy <= y2:
+                    is_hover = True
 
-        cx, cy = center
-        n_opts = len(self.options)
-        angle_step = 2 * math.pi / n_opts
+            bg_col = (30, 25, 40)
+            border_col = ABU
+            txt_col = PUTIH
 
-        cur_hover = -1
-        if pointer is not None:
-            px_x, px_y = pointer
-            dx, dy = px_x - cx, px_y - cy
-            dist = math.hypot(dx, dy)
-            if self.radius_inner <= dist <= self.radius_outer + 35:
-                ang = math.atan2(dy, dx)
-                if ang < 0:
-                    ang += 2 * math.pi
-                cur_hover = int(ang / angle_step) % n_opts
+            if is_hover:
+                bg_col = (75, 55, 115)
+                border_col = CYAN
+                txt_col = CYAN
 
-        if cur_hover != -1:
-            if self.hover_idx == cur_hover:
-                if self.hover_start is not None:
-                    prog = (now - self.hover_start) / self.dwell_time
-                    if prog >= 1.0:
-                        triggered = self.options[cur_hover][0]
-                        self.hover_start = now + 0.35
+                if self.hover_target == b_id:
+                    progress = (now - self.hover_start) / self.dwell_time
+                    if progress >= 1.0:
+                        triggered_action = b_id
+                        self.hover_target = None
+                        self.hover_start = None
+                    else:
+                        pw = int((x2 - x1) * progress)
+                        cv2.rectangle(img, (x1, y2 - 4), (x1 + pw, y2), MAGENTA, -1)
+                else:
+                    self.hover_target = b_id
+                    self.hover_start = now
             else:
-                self.hover_idx = cur_hover
-                self.hover_start = now
-        else:
-            self.hover_idx = -1
-            self.hover_start = None
+                if self.hover_target == b_id:
+                    self.hover_target = None
+                    self.hover_start = None
 
-        overlay = img.copy()
-        cv2.circle(overlay, (cx, cy), self.radius_outer, (25, 20, 35), -1)
-        cv2.circle(overlay, (cx, cy), self.radius_inner, (15, 10, 20), -1)
+            cv2.rectangle(img, (x1, y1), (x2, y2), bg_col, -1)
+            cv2.rectangle(img, (x1, y1), (x2, y2), border_col, 2, cv2.LINE_AA)
+            (tw, th), _ = cv2.getTextSize(label, FONT, 0.48, 1)
+            tx = x1 + (x2 - x1 - tw) // 2
+            ty = y1 + (y2 - y1 + th) // 2
+            cv2.putText(img, label, (tx, ty), FONT, 0.48, txt_col, 1, cv2.LINE_AA)
 
-        for i in range(n_opts):
-            ang_start = i * angle_step
-            ang_end = (i + 1) * angle_step
-            ang_mid = (ang_start + ang_end) / 2.0
-
-            is_sel = (i == self.hover_idx)
-            x1 = int(cx + self.radius_inner * math.cos(ang_start))
-            y1 = int(cy + self.radius_inner * math.sin(ang_start))
-            x2 = int(cx + self.radius_outer * math.cos(ang_start))
-            y2 = int(cy + self.radius_outer * math.sin(ang_start))
-            cv2.line(overlay, (x1, y1), (x2, y2), ABU, 1, cv2.LINE_AA)
-
-            r_mid = (self.radius_inner + self.radius_outer) / 2
-            tx = int(cx + r_mid * math.cos(ang_mid))
-            ty = int(cy + r_mid * math.sin(ang_mid))
-
-            label = self.options[i][1]
-            (tw, th), _ = cv2.getTextSize(label, FONT, 0.45, 1)
-            txt_col = CYAN if is_sel else PUTIH
-            cv2.putText(overlay, label, (tx - tw // 2, ty + th // 2), FONT, 0.45, txt_col, 1, cv2.LINE_AA)
-
-            if is_sel and self.hover_start is not None:
-                prog = min(1.0, (now - self.hover_start) / self.dwell_time)
-                deg_s = int(math.degrees(ang_start))
-                deg_e = int(math.degrees(ang_start + angle_step * prog))
-                cv2.ellipse(overlay, (cx, cy), (self.radius_outer + 3, self.radius_outer + 3),
-                            0, deg_s, deg_e, MAGENTA, 3, cv2.LINE_AA)
-
-        cv2.circle(overlay, (cx, cy), self.radius_outer, CYAN, 2, cv2.LINE_AA)
-        cv2.circle(overlay, (cx, cy), self.radius_inner, AMBER, 2, cv2.LINE_AA)
-        cv2.putText(overlay, "OK", (cx - 12, cy + 5), FONT, 0.45, AMBER, 1, cv2.LINE_AA)
-
-        cv2.addWeighted(overlay, 0.85, img, 0.15, 0, img)
-        return triggered
+        return triggered_action
 
 class PolaroidAnimation:
     def __init__(self):
@@ -612,10 +579,12 @@ idx_pena = 1
 ketebalan_kuas = 6
 
 particles = ParticleSystem()
-radial_hud = RadialHUD()
+hud_horizontal = HorizontalHUD()
 polaroid = PolaroidAnimation()
 
 pinch_cooldown = 0.0
+menu_terbuka = False
+ok_cooldown = 0.0
 
 def simpan(gambar, tag="LENS"):
     global jml_foto, kilat_sampai
@@ -662,6 +631,10 @@ while True:
         px = info[0][2]
         if jarak_px(px[4], px[12]) < 28:
             is_ok_gesture = True
+
+    if is_ok_gesture and now > ok_cooldown:
+        menu_terbuka = not menu_terbuka
+        ok_cooldown = now + 0.50
 
     if mode == "LENSA":
         sudut = []
@@ -842,26 +815,29 @@ while True:
 
         particles.update_and_draw(tampil)
 
-    aksi_radial = radial_hud.draw_and_update(tampil, hand_center, pointer_pt, is_ok_gesture, now)
-    if aksi_radial:
-        if aksi_radial == "MODE":
-            mode = "GAMBAR" if mode == "LENSA" else "LENSA"
-            mulai_diam = mulai_ganti = quad = None
-            pena_akhir = pena_halus = None
-            menggambar = False
-            beruntun_ya = beruntun_tidak = 0
-            hilang = 99
-        elif aksi_radial == "FILTER":
-            idx_lensa = (idx_lensa + 1) % len(LENSA)
-        elif aksi_radial == "WARNA":
-            idx_pena = (idx_pena + 1) % len(PENA)
-        elif aksi_radial == "STEMPEL":
-            idx_stempel = (idx_stempel + 1) % len(STEMPEL_TYPES)
-        elif aksi_radial == "HAPUS":
-            kanvas[:] = 0
-            goresan = 0
-        elif aksi_radial == "FOTO":
-            simpan(tampil, "MANUAL")
+    if menu_terbuka:
+        aksi_menu = hud_horizontal.draw_and_update(tampil, pointer_pt, now)
+        if aksi_menu:
+            if aksi_menu == "MODE":
+                mode = "GAMBAR" if mode == "LENSA" else "LENSA"
+                mulai_diam = mulai_ganti = quad = None
+                pena_akhir = pena_halus = None
+                menggambar = False
+                beruntun_ya = beruntun_tidak = 0
+                hilang = 99
+            elif aksi_menu == "FILTER":
+                idx_lensa = (idx_lensa + 1) % len(LENSA)
+            elif aksi_menu == "WARNA":
+                idx_pena = (idx_pena + 1) % len(PENA)
+            elif aksi_menu == "STEMPEL":
+                idx_stempel = (idx_stempel + 1) % len(STEMPEL_TYPES)
+            elif aksi_menu == "HAPUS":
+                kanvas[:] = 0
+                goresan = 0
+            elif aksi_menu == "FOTO":
+                simpan(tampil, "MANUAL")
+            
+            menu_terbuka = False
 
     polaroid.draw(tampil, now)
 
